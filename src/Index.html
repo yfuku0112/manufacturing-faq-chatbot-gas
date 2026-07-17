@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <!-- 文字コードをUTF-8に設定する / Set character encoding to UTF-8. -->
+  <meta charset="UTF-8">
+
+  <!-- 端末の画面幅に合わせて表示する / Adjust layout to the device width. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Apps Script内でリンクを正しく開く / Open links correctly in Apps Script. -->
+  <base target="_top">
+
+  <style>
+    /*
+     * 共通設定
+     * Common styles
+     */
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #f3f6f9;
+      color: #263238;
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "Yu Gothic",
+        sans-serif;
+    }
+
+    /*
+     * チャット画面全体
+     * Main chatbot container
+     */
+    .chat-container {
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      overflow: hidden;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    }
+
+    /*
+     * ヘッダー
+     * Header
+     */
+    .header {
+      padding: 20px 24px;
+      background: #1565c0;
+      color: #ffffff;
+    }
+
+    .header h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+    }
+
+    .header p {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    /*
+     * 会話履歴の表示領域
+     * Conversation history area
+     */
+    #messages {
+      height: 480px;
+      padding: 20px;
+      overflow-y: auto;
+      background: #f8fafc;
+    }
+
+    /*
+     * 1件分のメッセージ
+     * Single message container
+     */
+    .message {
+      display: flex;
+      margin-bottom: 16px;
+    }
+
+    /*
+     * ユーザーのメッセージを右側へ配置する
+     * Align user messages to the right.
+     */
+    .message.user {
+      justify-content: flex-end;
+    }
+
+    /*
+     * メッセージの吹き出し
+     * Message bubble
+     */
+    .bubble {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /*
+     * ボット側の吹き出し
+     * Bot message bubble
+     */
+    .bot .bubble {
+      background: #e3f2fd;
+      border-bottom-left-radius: 4px;
+    }
+
+    /*
+     * ユーザー側の吹き出し
+     * User message bubble
+     */
+    .user .bubble {
+      background: #1565c0;
+      color: #ffffff;
+      border-bottom-right-radius: 4px;
+    }
+
+    /*
+     * 回答時に参照したFAQ ID
+     * Referenced FAQ ID
+     */
+    .faq-id {
+      display: block;
+      margin-top: 8px;
+      color: #607d8b;
+      font-size: 12px;
+    }
+
+    /*
+     * 質問入力欄と送信ボタン
+     * Question field and send button
+     */
+    .input-area {
+      display: flex;
+      gap: 10px;
+      padding: 16px;
+      border-top: 1px solid #dfe5eb;
+      background: #ffffff;
+    }
+
+    #question {
+      flex: 1;
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid #b0bec5;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    #question:focus {
+      border-color: #1565c0;
+      outline: none;
+    }
+
+    #sendButton {
+      padding: 0 22px;
+      border: none;
+      border-radius: 8px;
+      background: #1565c0;
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /*
+     * 検索中は送信ボタンを無効状態として表示する
+     * Displays the send button as disabled during a search.
+     */
+    #sendButton:disabled {
+      background: #90a4ae;
+      cursor: default;
+    }
+
+    /*
+     * 安全上の注意事項
+     * Safety notice
+     */
+    .notice {
+      padding: 0 16px 14px;
+      color: #607d8b;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    /*
+     * スマートフォン向け表示
+     * Mobile layout
+     */
+    @media (max-width: 600px) {
+      body {
+        padding: 0;
+      }
+
+      .chat-container {
+        min-height: 100vh;
+        border-radius: 0;
+      }
+
+      #messages {
+        height: calc(100vh - 190px);
+      }
+
+      .bubble {
+        max-width: 90%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- チャット画面全体 / Complete chatbot interface -->
+  <main class="chat-container">
+
+    <!-- ボット名と説明 / Chatbot name and description -->
+    <header class="header">
+      <h1>製造サポートアシスタント</h1>
+      <p>設備・品質・作業手順などについて質問できます</p>
+    </header>
+
+    <!-- 会話履歴の表示領域 / Conversation history area -->
+    <section id="messages" aria-live="polite">
+      <div class="message bot">
+        <div class="bubble">こんにちは。製造現場のFAQを検索します。
+困っている内容を入力してください。</div>
+      </div>
+    </section>
+
+    <!-- 質問入力欄と送信ボタン / Question field and send button -->
+    <div class="input-area">
+      <input
+        id="question"
+        type="text"
+        placeholder="例：装置の電源が入りません"
+        autocomplete="off"
+      >
+
+      <button
+        id="sendButton"
+        type="button"
+        onclick="sendQuestion()"
+      >
+        送信
+      </button>
+    </div>
+
+    <!-- 安全に関する注意事項 / Safety notice -->
+    <div class="notice">
+      緊急時や安全に関わる内容は、現場責任者へ確認してください。
+    </div>
+  </main>
+
+  <script>
+    /*
+     * 操作対象となるHTML要素を取得する
+     * Get the HTML elements used by the chatbot.
+     */
+    const questionInput = document.getElementById('question');
+    const sendButton = document.getElementById('sendButton');
+    const messages = document.getElementById('messages');
+
+    /*
+     * Enterキーでも質問を送信する
+     * Submit the question when the Enter key is pressed.
+     *
+     * 日本語変換の確定時には送信しない
+     * Do not submit while an IME is composing text.
+     */
+    questionInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' && !event.isComposing) {
+        sendQuestion();
+      }
+    });
+
+    /**
+     * 入力された質問をCode.gsへ送り、検索結果を表示する。
+     * Send the question to Code.gs and display the search result.
+     *
+     * 検索中は送信ボタンを無効にし、連続送信を防止する。
+     * Disable the send button during a search to prevent duplicate requests.
+     */
+    function sendQuestion() {
+      const question = questionInput.value.trim();
+
+      // 質問が空、または検索中の場合は処理しない。
+      // Do not process an empty question or another request during a search.
+      if (!question || sendButton.disabled) {
+        return;
+      }
+
+      // ユーザーの質問を画面へ表示する。
+      // Display the user's question.
+      addMessage(question, 'user');
+
+      questionInput.value = '';
+      sendButton.disabled = true;
+
+      // FAQ検索中であることを一時的に表示する。
+      // Display a temporary message while searching the FAQ.
+      const loadingMessage = addMessage(
+        'FAQを検索しています……',
+        'bot'
+      );
+
+      /*
+       * Code.gsのsearchFaq関数を非同期で呼び出す。
+       * Call the searchFaq function in Code.gs asynchronously.
+       */
+      google.script.run
+        .withSuccessHandler(function (result) {
+          loadingMessage.remove();
+
+          // 回答と参照FAQ IDを表示する。
+          // Display the answer and referenced FAQ ID.
+          addMessage(
+            result.answer,
+            'bot',
+            result.faqId
+          );
+
+          sendButton.disabled = false;
+          questionInput.focus();
+        })
+        .withFailureHandler(function (error) {
+          loadingMessage.remove();
+
+          // サーバー側で発生したエラーを表示する。
+          // Display an error returned by the server.
+          addMessage(
+            'エラーが発生しました。\n' + error.message,
+            'bot'
+          );
+
+          sendButton.disabled = false;
+          questionInput.focus();
+        })
+        .searchFaq(question);
+    }
+
+    /**
+     * チャット画面へメッセージを追加する。
+     * Add a message to the chatbot interface.
+     *
+     * @param {string} text 表示する文章 / Text to display.
+     * @param {string} type "user"または"bot" / Either "user" or "bot".
+     * @param {string} faqId 参照したFAQ ID / Referenced FAQ ID.
+     * @return {HTMLElement} 追加したメッセージ要素 / Added message element.
+     */
+    function addMessage(text, type, faqId) {
+      // 1件分のメッセージを囲む要素を作成する。
+      // Create the container for one message.
+      const message = document.createElement('div');
+      message.className = 'message ' + type;
+
+      // メッセージ本文を表示する吹き出しを作成する。
+      // Create the message bubble.
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+
+      /*
+       * textContentを使用し、入力内容をHTMLとして実行させない。
+       * Use textContent to prevent input from being executed as HTML.
+       */
+      bubble.textContent = text;
+
+      // FAQ IDが返された場合のみ、回答の下に表示する。
+      // Display the FAQ ID only when one is returned.
+      if (faqId) {
+        const reference = document.createElement('span');
+        reference.className = 'faq-id';
+        reference.textContent = '参照FAQ：' + faqId;
+        bubble.appendChild(reference);
+      }
+
+      message.appendChild(bubble);
+      messages.appendChild(message);
+
+      // 最新のメッセージまで自動的にスクロールする。
+      // Automatically scroll to the newest message.
+      messages.scrollTop = messages.scrollHeight;
+
+      return message;
+    }
+  </script>
+</body>
+</html>
